@@ -1,0 +1,7 @@
+import Link from 'next/link';
+import { redirect } from 'next/navigation';
+import { auth,authConfigured,signOut } from '@/lib/auth';
+import { db } from '@/lib/db';
+import { money } from '@/lib/money';
+export const dynamic='force-dynamic';
+export default async function Account(){if(!authConfigured)redirect('/login');const session=await auth();if(!session?.user?.id)redirect('/login');const orders=await db().order.findMany({where:{userId:session.user.id},orderBy:{createdAt:'desc'},take:50});return <div className="section"><div className="section-heading"><div><span className="eyebrow">YOUR ACCOUNT</span><h1 style={{marginTop:16}}>Hello, {session.user.name?.split(' ')[0]||'there'}.</h1></div><form action={async()=>{'use server';await signOut({redirectTo:'/'});}}><button className="text-link">Sign out</button></form></div><h2>Your orders</h2>{!orders.length?<div className="empty-state"><p>Your collection starts here.</p><Link href="/collections" className="button">Find something beautiful</Link></div>:<div className="table-wrap"><table><thead><tr><th>Order</th><th>Date</th><th>Status</th><th>Total</th></tr></thead><tbody>{orders.map(o=><tr key={o.id}><td><Link href={`/account/orders/${o.id}`}>{o.id.slice(-8).toUpperCase()} →</Link></td><td>{o.createdAt.toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata'})}</td><td>{o.status.replaceAll('_',' ')}</td><td>{money(o.total)}</td></tr>)}</tbody></table></div>}</div>;}

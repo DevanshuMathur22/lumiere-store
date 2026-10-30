@@ -1,0 +1,16 @@
+import { beforeEach,describe,it,expect,vi } from 'vitest';
+const mocks=vi.hoisted(()=>({tx:{payment:{findUnique:vi.fn(),update:vi.fn()},order:{findUniqueOrThrow:vi.fn(),update:vi.fn()},webhookEvent:{findUnique:vi.fn(),create:vi.fn()},inventoryBalance:{updateMany:vi.fn()},inventoryMovement:{create:vi.fn()},inventoryReservation:{updateMany:vi.fn()},auditLog:{create:vi.fn()},$queryRaw:vi.fn()}}));
+vi.mock('@/lib/db',()=>({db:()=>({$transaction:(fn:(tx:typeof mocks.tx)=>unknown)=>fn(mocks.tx)})}));
+vi.mock('@/lib/security',()=>({HttpError:class extends Error{constructor(public status:number,message:string){super(message);}}}));
+import { settleCapturedPayment } from '../src/modules/payments/settle';
+const payment={id:'pay_1',order_id:'order_provider',amount:59000,currency:'INR',status:'captured'};
+beforeEach(()=>{vi.resetAllMocks();mocks.tx.payment.findUnique.mockResolvedValue({orderId:'o1'});mocks.tx.order.findUniqueOrThrow.mockResolvedValue({id:'o1',total:59000,currency:'INR',status:'PENDING_PAYMENT',payment:{status:'PENDING'},reservations:[{variantId:'v1',warehouseId:'w1',quantity:1,status:'HELD'}]});mocks.tx.inventoryBalance.updateMany.mockResolvedValue({count:1});});
+describe('captured-payment reconciliation',()=>{
+ it('commits stock and confirms an exact captured amount',async()=>{await settleCapturedPayment('e1',payment);expect(mocks.tx.inventoryBalance.updateMany).toHaveBeenCalledOnce();expect(mocks.tx.order.update).toHaveBeenCalledWith({where:{id:'o1'},data:{status:'CONFIRMED'}});});
+ it('rejects underpayment before touching stock',async()=>{await expect(settleCapturedPayment('e1',{...payment,amount:1})).rejects.toThrow('amount');expect(mocks.tx.inventoryBalance.updateMany).not.toHaveBeenCalled();});
+ it('rejects authorized-but-not-captured payments',async()=>{await expect(settleCapturedPayment('e1',{...payment,status:'authorized'})).rejects.toThrow('captured');expect(mocks.tx.payment.findUnique).not.toHaveBeenCalled();});
+ it('acknowledges replay without deducting stock twice',async()=>{mocks.tx.webhookEvent.findUnique.mockResolvedValue({id:'e1'});expect((await settleCapturedPayment('e1',payment)).replay).toBe(true);expect(mocks.tx.inventoryBalance.updateMany).not.toHaveBeenCalled();});
+ it('deduplicates browser verification followed by webhook capture',async()=>{mocks.tx.order.findUniqueOrThrow.mockResolvedValue({id:'o1',total:59000,currency:'INR',status:'CONFIRMED',payment:{status:'CAPTURED',providerPaymentId:'pay_1'},reservations:[]});expect((await settleCapturedPayment('different-event',payment)).replay).toBe(true);expect(mocks.tx.inventoryBalance.updateMany).not.toHaveBeenCalled();});
+ it('rejects a second distinct payment for an already-paid order',async()=>{mocks.tx.order.findUniqueOrThrow.mockResolvedValue({id:'o1',total:59000,currency:'INR',status:'CONFIRMED',payment:{status:'CAPTURED',providerPaymentId:'pay_other'},reservations:[]});await expect(settleCapturedPayment('e2',payment)).rejects.toThrow('additional payment');});
+ it('does not confirm when reserved stock is missing',async()=>{mocks.tx.inventoryBalance.updateMany.mockResolvedValue({count:0});await expect(settleCapturedPayment('e1',payment)).rejects.toThrow('Inventory');expect(mocks.tx.order.update).not.toHaveBeenCalled();});
+});

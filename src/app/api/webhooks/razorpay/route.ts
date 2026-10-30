@@ -1,0 +1,6 @@
+import { verifySignature } from '@/modules/payments/signature';
+import { settleCapturedPayment } from '@/modules/payments/settle';
+import { HttpError, errorResponse } from '@/lib/security';
+import { z } from 'zod';
+const captured = z.object({ id: z.string().min(1), order_id: z.string().min(1), amount: z.number().int().positive(), currency: z.literal('INR'), status: z.literal('captured') });
+export async function POST(request: Request) { try { const body = await request.text(); if (body.length > 262144) throw new HttpError(413, 'Payload too large.'); const secret = process.env.RAZORPAY_WEBHOOK_SECRET; if (!secret) throw new HttpError(503, 'Webhook is not configured.'); if (!verifySignature(body, request.headers.get('x-razorpay-signature') || '', secret)) throw new HttpError(401, 'Invalid signature.'); const payload = JSON.parse(body); if (payload.event !== 'payment.captured') return Response.json({ ignored: true }); const eventId = request.headers.get('x-razorpay-event-id'); if (!eventId || eventId.length > 200) throw new HttpError(400, 'Missing event ID.'); return Response.json(await settleCapturedPayment(`webhook:${eventId}`, captured.parse(payload.payload?.payment?.entity))); } catch (e) { return errorResponse(e); } }
