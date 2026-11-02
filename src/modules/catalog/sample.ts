@@ -1,4 +1,12 @@
-export type CatalogProduct = { id: string; slug: string; name: string; category: string; categorySlug: string; description: string; material: string; image: string; price: number; sku: string; stock: number; featured: boolean };
+export type CatalogVariant = {
+  id: string;
+  sku: string;
+  name: string;
+  price: number;
+  stock: number;
+};
+
+export type CatalogProduct = { id: string; slug: string; name: string; category: string; categorySlug: string; description: string; material: string; image: string; price: number; sku: string; stock: number; featured: boolean; variants?: CatalogVariant[] };
 export const sampleProducts: CatalogProduct[] = [
  { id: 'v-terra', slug: 'terra-sculptural-vase', name: 'Terra Sculptural Vase', category: 'Ceramics', categorySlug: 'ceramics', price: 349000, sku: 'LUM-TER-001', stock: 18, featured: true, material: 'Hand-finished stoneware · 24 cm', image: '/images/vase.jpg', description: 'An organic silhouette, a softly textured surface. Terra brings a little stillness to a shelf, a table, or a sunlit corner. Each piece is finished by hand, with subtle variations that make it yours.' },
  { id: 'v-linen', slug: 'sunday-linen-cushion', name: 'Sunday Linen Cushion', category: 'Textiles', categorySlug: 'textiles', price: 229000, sku: 'LUM-LIN-001', stock: 24, featured: true, material: 'Natural linen · 45 × 45 cm', image: '/images/linen.jpg', description: 'Soft, relaxed linen in a warm natural shade. A quiet layer of texture for your favourite corner, with a removable cover and a generous feather-free insert.' },

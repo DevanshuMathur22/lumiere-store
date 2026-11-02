@@ -14,7 +14,13 @@ export async function prepareCheckout(userId: string, input: unknown) {
     await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
     const previous = await tx.order.findUnique({ where: { userId_idempotencyKey: { userId, idempotencyKey: data.idempotencyKey } }, include: { payment: true } });
     if (previous) { if (previous.requestHash !== requestHash) throw new HttpError(409, 'This checkout key was already used for different details.'); return { order: previous, created: false }; }
-    const variants = await tx.productVariant.findMany({ where: { id: { in: data.items.map(i => i.variantId) }, product: { active: true }, currency: 'INR' }, include: { product: true } });
+    const variants = await tx.productVariant.findMany({ where: { id: { in: data.items.map(i => i.variantId) }, product: { active: true, OR: [
+          { sellerId: null },
+          {
+            reviewStatus: 'APPROVED',
+            seller: { is: { status: 'APPROVED' } }
+          }
+        ] }, currency: 'INR' }, include: { product: true } });
     if (variants.length !== data.items.length) throw new HttpError(409, 'An item is no longer available.');
     const lines = data.items.map(i => { const v = variants.find(v => v.id === i.variantId)!; return { ...i, price: v.price, productName: v.product.name, variantName: v.name, sku: v.sku }; });
     const amount = totals(lines);
